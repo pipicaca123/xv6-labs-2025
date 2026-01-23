@@ -1,0 +1,25 @@
+# xv6-riscv Style Configuration (Customized)
+BasedOnStyle: LLVM
+IndentWidth: 2
+UseTab: Never
+ColumnLimit: 80
+
+# 1. 括號前的空格設定
+# 將此設為 Always，函數呼叫與控制語句 (if/while) 前都會加空格
+SpaceBeforeParens: ControlStatements
+
+# 2. 空行限制
+# 設定連續空行的最大數量。設為 1 代表最多只允許 1 行空行（即代碼不超過 2 個換行）
+# 若你希望最多可以「空兩行」，則設為 2
+MaxEmptyLinesToKeep: 1
+
+# --- 以下維持原有的 xv6 風格設定 ---
+BreakBeforeBraces: Attach
+AlwaysBreakAfterReturnType: AllDefinitions
+PointerAlignment: Right
+AllowShortIfStatementsOnASingleLine: true
+IndentCaseLabels: false
+
+# 確保算式符號兩旁有空格 (例如 ticks - ticks0)
+SpaceBeforeAssignmentOperators: true
+SpaceAroundPointerQualifiers: Default
