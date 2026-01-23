@@ -105,3 +105,20 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_interpose(void) {
+  int mask;
+  char str[4];
+  struct proc *p = myproc();
+
+  argint(0, &mask);
+  argstr(1, str, sizeof(str));
+
+  if (strncmp(str, "-", sizeof(str)) != 0) {
+    printf("second arg of interpose must be'-'\n");
+    return -1;
+  }
+  p->interpose_mask = mask;
+  return 0;
+}

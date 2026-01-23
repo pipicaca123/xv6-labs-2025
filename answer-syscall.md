@@ -67,3 +67,13 @@ file kernel/kernel # capture execution file
 
 layout src # 取得與真實C程式碼的對應表
 ```
+
+vscode 快速環境配置:
+1. C/C++ (Microsoft): 提供語法高亮與調試支持。
+2. Clangd (推薦): 比官方 C/C++ 插件更強大的代碼跳轉與自動補全。
+- 註：若使用 Clangd，建議禁用 C/C++ 插件的 IntelliSense 功能以避免衝突。
+3. 代碼跳轉配置 (IntelliSense)
+xv6 包含很多硬件底層宏定義，為了讓 VS Code 正確識別跳轉，最推薦的方法是生成 compile_commands.json。
+- 安裝 Bear：sudo apt install bear
+- 在 xv6 目錄執行：make clean && bear -- make qemu
+- 根目錄會生成 compile_commands.json，VS Code 的 Clangd 插件會自動讀取它。
