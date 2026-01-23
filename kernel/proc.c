@@ -124,10 +124,12 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
-  p->interpose_mask = 0;
+  p->interpose_prohibit_mask = 0;
+  memset(p->interpose_allowed_filename, 0,
+         sizeof(p->interpose_allowed_filename));
 
   // Allocate a trapframe page.
-  if((p->trapframe = (struct trapframe *)kalloc()) == 0){
+  if ((p->trapframe = (struct trapframe *)kalloc()) == 0) {
     freeproc(p);
     release(&p->lock);
     return 0;
@@ -278,7 +280,7 @@ kfork(void)
   *(np->trapframe) = *(p->trapframe);
 
   // copy interpose_mask
-  np->interpose_mask = p->interpose_mask;
+  np->interpose_prohibit_mask = p->interpose_prohibit_mask;
 
   // Cause fork to return 0 in the child.
   np->trapframe->a0 = 0;

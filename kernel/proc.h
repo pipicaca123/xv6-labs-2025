@@ -105,5 +105,6 @@ struct proc {
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
 
-  int interpose_mask; 
+  int interpose_prohibit_mask;
+  char interpose_allowed_filename[MAXPATH];
 };

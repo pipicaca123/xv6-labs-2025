@@ -132,19 +132,34 @@ static uint64 (*syscalls[])(void) = {
 };
 // clang-format on
 
+int
+interpose_prohibit_check(int syscall_idx) {
+  struct proc *p = myproc();
+  int syscall_prohibit_mask;
+
+  syscall_prohibit_mask = p->interpose_prohibit_mask & (1 << syscall_idx);
+
+  if (syscall_prohibit_mask &&
+      (syscall_idx == SYS_exec || syscall_idx == SYS_open)) {
+    char filename[MAXPATH];
+    argstr(0, filename, sizeof(filename));
+    if (strncmp(filename, p->interpose_allowed_filename, sizeof(filename)) == 0)
+      syscall_prohibit_mask = 0;
+  }
+  return syscall_prohibit_mask != 0;
+}
+
 void
 syscall(void)
 {
   int num;
   struct proc *p = myproc();
-  int syscall_mask;
 
   num = p->trapframe->a7;
-  syscall_mask = p->interpose_mask & (1 << num);
   if (num > 0 && num < NELEM(syscalls) && syscalls[num]) {
     // Use num to lookup the system call function for num, call it,
     // and store its return value in p->trapframe->a0
-    if (syscall_mask != 0) {
+    if (interpose_prohibit_check(num)) {
       p->trapframe->a0 = -1;
     } else {
       p->trapframe->a0 = syscalls[num]();
