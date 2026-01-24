@@ -55,10 +55,18 @@ sources using the sie register.
 - ans: 承上題延伸，這個code對應的指令是 `lw    a3, 0(zero)`，反推得知`num`放在`a3 register`裡面。
 
 5. Why does the kernel crash? Hint: look at figure 3-3 in the text; is address 0 mapped in the kernel address space? Is that confirmed by the value in scause above? (See description of scause in RISC-V privileged instructions)
-- ans:
+- ans:直接從圖去看，kernel VA的映射也沒有addr=0，那自然會遇到page fault的問題（因為該記憶體分頁未被配置）。如何證實？`Load Page Fault (scause: 13 / 0xd)`panice資訊就可以推知了。
+![virtual_page_table](note_helper/virutalpagetable.png)
 
 6. What is the name of the process that was running when the kernel paniced? What is its process id (pid)?
-- ans: 
+- ans: 看上面的`(gdb) p /x *p `輸出
+```
+
+// 重點：
+name = {0x69, 0x6e, 0x69, 0x74, 0x0 <repeats 12 times>}}
+解析字串就是 Init，所以這題答案是Init
+
+```
 ## HELPER
 gdb command: 
 ```
