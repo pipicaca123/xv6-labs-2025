@@ -131,6 +131,12 @@ found:
     release(&p->lock);
     return 0;
   }
+  if ((p->usysframe = (struct usyscall *)kalloc()) == 0) {
+    freeproc(p);
+    kfree(p->trapframe);
+    release(&p->lock);
+    return 0;
+  }
 
   // An empty user page table.
   p->pagetable = proc_pagetable(p);
@@ -146,6 +152,16 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  {
+    // Speed up system calls
+    pte_t *usys_pte = walk(p->pagetable, USYSCALL, 0);
+    *usys_pte &= ~PTE_U; // temporal change PTE status
+    *usys_pte |= PTE_W;
+    p->usysframe->pid = p->pid;
+    *usys_pte |= PTE_U; // temporal change PTE status
+    *usys_pte &= ~PTE_W;
+  }
+
   return p;
 }
 
@@ -158,6 +174,8 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+  if (p->usysframe)
+    kfree((void *)p->usysframe);
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -202,6 +220,14 @@ proc_pagetable(struct proc *p)
     return 0;
   }
 
+  if (mappages(pagetable, USYSCALL, PGSIZE, (uint64)(p->usysframe),
+               PTE_R | PTE_U) < 0) {
+    uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+    uvmunmap(pagetable, TRAPFRAME, 1, 0);
+    uvmfree(pagetable, 0);
+    return 0;
+  }
+
   return pagetable;
 }
 
@@ -212,6 +238,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, USYSCALL, 1, 0);
   uvmfree(pagetable, sz);
 }
 

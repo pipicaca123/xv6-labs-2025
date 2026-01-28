@@ -101,7 +101,8 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
   for(int level = 2; level > 0; level--) {
     pte_t *pte = &pagetable[PX(level, va)];
     if(*pte & PTE_V) {
-      pagetable = (pagetable_t)PTE2PA(*pte);
+      pagetable = (pagetable_t)PTE2PA(
+          *pte); // NOTE: this is va! seems strange is because xv6's 1:1 mapping
 #ifdef LAB_PGTBL
       if(PTE_LEAF(*pte)) {
         return pte;
@@ -110,6 +111,8 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
     } else {
       if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
         return 0;
+      // NOTE: pagetable va! seems strange is because xv6's 1:1 mapping
+      // so PA2PTE(pagetable) is correct.
       memset(pagetable, 0, PGSIZE);
       *pte = PA2PTE(pagetable) | PTE_V;
     }
@@ -140,15 +143,56 @@ walkaddr(pagetable_t pagetable, uint64 va)
   return pa;
 }
 
-
 #if defined(LAB_PGTBL) || defined(SOL_MMAP) || defined(SOL_COW)
-void
-vmprint(pagetable_t pagetable) {
+// avoid root page table duplicated printed
+pte_t showed_ptelvl2 = 0xFFFFFFFFFFFFFFFF, showed_ptelvl1 = 0xFFFFFFFFFFFFFFFF;
+
+void pte_show(pagetable_t pagetable, uint64 lvl2, uint64 lvl1, uint64 lvl0) {
+  // va convert from PTE_ENTRY, ref fig3.2
+  uint64 va = 0;
+  pte_t *pte;
+  va |= (lvl2 << (12 + 9 + 9));
+  va |= (lvl1 << (12 + 9));
+  va |= (lvl0 << 12);
+
+  pte = &pagetable[PX(2, va)];
+
+  if (!(*pte & PTE_V))
+    return;
+  if (showed_ptelvl2 != *pte) {
+    showed_ptelvl2 = *pte;
+    printf("..0x%lx: pte 0x%lx pa 0x%lx\n", va, *pte, PTE2PA(*pte));
+  }
+
+  pagetable = (pagetable_t)PTE2PA(*pte);
+  pte = &pagetable[PX(1, va)];
+  if (!(*pte & PTE_V))
+    return;
+  if (showed_ptelvl1 != *pte) {
+    showed_ptelvl1 = *pte;
+    printf(".. ..0x%lx: pte 0x%lx pa 0x%lx\n", va, *pte, PTE2PA(*pte));
+  }
+
+  pagetable = (pagetable_t)PTE2PA(*pte);
+  pte = &pagetable[PX(0, va)];
+
+  if (!(*pte & PTE_V))
+    return;
+  printf(".. .. ..0x%lx: pte 0x%lx pa 0x%lx\n", va, *pte, PTE2PA(*pte));
+}
+
+void vmprint(pagetable_t pagetable) {
   // your code here
+  printf("page table %p\n", pagetable);
+  for (uint64 lvl2 = 0; lvl2 < 512; lvl2++) {
+    for (uint64 lvl1 = 0; lvl1 < 512; lvl1++) {
+      for (uint64 lvl0 = 0; lvl0 < 512; lvl0++) {
+        pte_show(pagetable, lvl2, lvl1, lvl0);
+      }
+    }
+  }
 }
 #endif
-
-
 
 // add a mapping to the kernel page table.
 // only used when booting.
