@@ -42,3 +42,14 @@ va 0x3FFFFFF000 pte 0x2000184B pa 0x80006000 perm 0x4B
 
 2. Which other xv6 system call(s) could be made faster using this shared page? Explain how.
 - ans:只要是user會使用到且不會危害到安全性(kernel info)的應該都可以。ex:struct proc 的 ofile, cwd。
+
+## TODO LIST
+- Implement some ideas from the paper referenced above to make your super-page design more real.
+- Unmap the first page of a user process so that dereferencing a null pointer will result in a fault. You will have to change user.ld to start the user text segment at, for example, 4096, instead of 0.
+- Add a system call that reports dirty pages (modified pages) using PTE_D.
+
+### paper實踐
+Juan Navarro, Sitaram Iyer, Peter Druschel, and Alan Cox. Practical, transparent operating system support for superpages. SIGOPS Oper. Syst. Rev., 36(SI):89-104, December 2002.
+- 這篇應該要有兩個分支任務:
+  1. pagetable - kalloc優化成 buddy system。 > Buddy System 是重點！
+  2. 實現上面論文的內容。
