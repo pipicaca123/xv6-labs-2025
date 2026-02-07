@@ -154,7 +154,7 @@ found:
 
   {
     // Speed up system calls
-    pte_t *usys_pte = walk(p->pagetable, USYSCALL, 0);
+    pte_t *usys_pte = walk(p->pagetable, USYSCALL, 0, 3);
     *usys_pte &= ~PTE_U; // temporal change PTE status
     *usys_pte |= PTE_W;
     p->usysframe->pid = p->pid;
