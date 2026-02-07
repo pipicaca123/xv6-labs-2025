@@ -47,6 +47,7 @@ va 0x3FFFFFF000 pte 0x2000184B pa 0x80006000 perm 0x4B
 - Implement some ideas from the paper referenced above to make your super-page design more real.
 - Unmap the first page of a user process so that dereferencing a null pointer will result in a fault. You will have to change user.ld to start the user text segment at, for example, 4096, instead of 0.
 - Add a system call that reports dirty pages (modified pages) using PTE_D.
+- 2023 testcase & 任務移植到這裡。(hard再關注)
 
 ### paper實踐
 Juan Navarro, Sitaram Iyer, Peter Druschel, and Alan Cox. Practical, transparent operating system support for superpages. SIGOPS Oper. Syst. Rev., 36(SI):89-104, December 2002.
