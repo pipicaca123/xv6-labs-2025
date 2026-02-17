@@ -149,3 +149,14 @@ printfinit(void)
 {
   initlock(&pr.lock, "pr");
 }
+
+void backtrace(void){
+  uint64 fp = r_fp();
+  uint64 kstack_base = PGROUNDDOWN(fp); // by using kstack_base to recognize whether backtrace is done.
+  uint64 kstack_top = PGROUNDUP(fp);
+  printf("backtrace:\n");
+  while(fp >= kstack_base && fp < kstack_top){
+    printf("%p\n", (void*)(*(uint64*)(fp-8)));
+    fp = *(uint64*)(fp-16);
+  }
+}
