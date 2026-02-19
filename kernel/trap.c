@@ -9,12 +9,14 @@
 struct spinlock tickslock;
 uint ticks;
 
-extern char trampoline[], uservec[];
+extern char trampoline[], uservec[], userret[];
 
 // in kernelvec.S, calls kerneltrap().
 void kernelvec();
 
 extern int devintr();
+
+void triggeruseralarm();
 
 void
 trapinit(void)
@@ -81,8 +83,16 @@ usertrap(void)
     kexit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){
+    triggeruseralarm();
     yield();
+  }
+
+  if(p->alarm_ret_trig){
+    memmove(p->trapframe, &p->temp_trapframe, sizeof(struct trapframe));
+    p->alarm_ret_trig = 0;
+    p->user_alarm_done = 1;
+  }
 
   prepare_return();
 
@@ -217,3 +227,32 @@ devintr()
   }
 }
 
+void triggeruseralarm(){
+  struct proc *p = myproc();
+  p->alarm_ticks_cnt++;
+  if(p->alarm_ticks_cnt % p->alarm_ticks_intervals == 0 && p->user_alarm_done == 1){
+    memmove(&p->temp_trapframe, p->trapframe, sizeof(struct trapframe));
+    p->trapframe->epc = (uint64) p->alarm_handler;
+    p->user_alarm_done = 0;// make sure not to re-triggered before sigreturn is called.
+  }
+}
+
+uint64 sys_sigalarm(void){
+  struct proc *p = myproc();
+  int alarm_ticks_intv;
+  uint64 alarm_pointer;
+
+  argint(0, &alarm_ticks_intv);
+  argaddr(1, &alarm_pointer);
+
+  p->alarm_handler = (void*) alarm_pointer;
+  p->alarm_ticks_cnt = 0;
+  p->alarm_ticks_intervals = (uint64) alarm_ticks_intv;
+  return 0;
+}
+
+uint64 sys_sigreturn(void){
+  struct proc *p = myproc();
+  p->alarm_ret_trig = 1;
+  return 0;
+}
