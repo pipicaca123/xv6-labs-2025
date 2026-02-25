@@ -56,10 +56,16 @@ void            itrunc(struct inode*);
 void            ireclaim(int);
 
 // kalloc.c
+enum kallocstatoperate {
+  KALLOC_INC,
+  KALLOC_DEC,
+  KALLOC_GETCNT,
+};
+
 void*           kalloc(void);
 void            kfree(void *);
 void            kinit(void);
-
+uint8 kallocstatistics(uint64 phyaddr, enum kallocstatoperate kalloc_stat_op);
 // log.c
 void            initlog(int, struct superblock*);
 void            log_write(struct buf*);

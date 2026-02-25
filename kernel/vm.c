@@ -299,7 +299,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  // char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -308,11 +308,19 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       continue;   // physical page hasn't been allocated
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    if ((flags & PTE_W) == PTE_W) {
+      *pte &= ~PTE_W;
+      *pte |= PTE_PW;
+    }
+    flags = PTE_FLAGS(*pte);
+    // if((mem = kalloc()) == 0)
+    //   goto err;
+    // memmove(mem, (char*)pa, PGSIZE);
+    // printf("show pteflags=0x%x\n", flags); // why f3?
+    kallocstatistics(pa, KALLOC_INC);
+    if (mappages(new, i, PGSIZE, (uint64)pa, flags) != 0) {
+      // kfree(mem);
+      printf("nono~\n");
       goto err;
     }
   }
@@ -449,26 +457,66 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 // that was lazily allocated in sys_sbrk().
 // returns 0 if va is invalid or already mapped, or if
 // out of physical memory, and physical address if successful.
+// FIXME: something misleading or think wrong? should not malloc here?
 uint64
 vmfault(pagetable_t pagetable, uint64 va, int read)
 {
   uint64 mem;
+  pte_t *pte;
+  uint64 flags;
+  uint64 pa;
+  uint8 phyaddr_refcnt;
   struct proc *p = myproc();
+  // printf("VMFAULT\r\n");
 
-  if (va >= p->sz)
-    return 0;
-  va = PGROUNDDOWN(va);
-  if(ismapped(pagetable, va)) {
+  if (va >= p->sz) {
+    printf("VMFAULT FLAG0\r\n");
     return 0;
   }
-  mem = (uint64) kalloc();
+  va = PGROUNDDOWN(va);
+  // printf("VMFAULT FLAG1.0\r\n");
+  // pte = walk(pagetable, va, 0);
+  // printf("PTE=%p, PTEFLAGS=0x%lx\n", pte, PTE_FLAGS(*pte));
+  if (!ismapped(pagetable, va)) {
+    return 0;
+  }
+
+  // printf("VMFAULT FLAG1\r\n");
+  pte = walk(pagetable, va, 0);
+  flags = PTE_FLAGS(*pte);
+  if ((flags & PTE_PW) == 0) {
+    printf("no pte_pw?\n");
+    return 0;
+  }
+  *pte &= ~PTE_PW;
+  *pte |= PTE_W;
+  flags = PTE_FLAGS(*pte);
+  pa = PTE2PA(*pte);
+
+  phyaddr_refcnt = kallocstatistics(pa, KALLOC_GETCNT);
+  if (phyaddr_refcnt == 1) {
+    // only one process is using this physical page, modify flag but not to
+    // alloc new page!
+    // printf("not to alloc new page!\n");
+    return pa;
+  }
+
+  // printf("VMFAULT FLAG2\r\n");
+  // malloc new PA for process
+  mem = (uint64)kalloc();
   if(mem == 0)
     return 0;
-  memset((void *) mem, 0, PGSIZE);
-  if (mappages(p->pagetable, va, PGSIZE, mem, PTE_W|PTE_U|PTE_R) != 0) {
+  // printf("VMFAULT FLAG3\r\n");
+  memmove((void *)mem, (void *)pa, PGSIZE);
+  // remap new VA to PA
+  uvmunmap(p->pagetable, va, 1, 0);
+  kallocstatistics(pa, KALLOC_DEC);
+
+  if (mappages(p->pagetable, va, PGSIZE, mem, flags) != 0) {
     kfree((void *)mem);
     return 0;
   }
+  // printf("mem=%p\n", (void *)mem);
   return mem;
 }
 

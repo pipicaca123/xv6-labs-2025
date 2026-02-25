@@ -9,10 +9,30 @@
 #include "riscv.h"
 #include "defs.h"
 
+// TODO: use dynamic method, record PHYSTOP - end[] space is enough.
+#define ALLOCSTAT_NUM 64
+#define ALLOCPAGESCNT 32768
+struct kallocstat {
+  // uint8 *phypages_refcnt[ALLOCSTAT_NUM]; // using kalloc to record phypage
+  //                                        // count, 4096 / 8 = 512 pages. 512
+  //                                        // pages = 512 * 4096 = 2097152
+  //                                        (bytes)
+  //                                        // 0x88000000 - 0x80000000 =
+  //                                        0x8000000
+  //                                        // ＝ 134217728 (bytes) = 32768
+  //                                        (pages)
+  //                                        // 32768 / 512 = 64, so this why
+  //                                        // pointer array size is 64.
+  uint8 phypages_refcnt[ALLOCPAGESCNT];
+};
 void freerange(void *pa_start, void *pa_end);
+void kallocstatinit(void);
+// uint8 kallocstatistics(uint64 phyaddr, enum kallocstatoperate
+// kalloc_stat_op);
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.
+struct kallocstat alloc_stat_obj;
 
 struct run {
   struct run *next;
@@ -26,6 +46,8 @@ struct {
 void
 kinit()
 {
+  kallocstatinit();
+
   initlock(&kmem.lock, "kmem");
   freerange(end, (void*)PHYSTOP);
 }
@@ -47,10 +69,16 @@ void
 kfree(void *pa)
 {
   struct run *r;
+  uint8 phyaddr_ref_cnt;
 
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
+  phyaddr_ref_cnt = kallocstatistics((uint64)pa, KALLOC_DEC);
+  if (phyaddr_ref_cnt > 0) {
+    // printf("reference more than 1, %d\n", phyaddr_ref_cnt);
+    return;
+  }
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
 
@@ -69,6 +97,7 @@ void *
 kalloc(void)
 {
   struct run *r;
+  uint8 phyaddr_refcnt;
 
   acquire(&kmem.lock);
   r = kmem.freelist;
@@ -78,5 +107,41 @@ kalloc(void)
 
   if(r)
     memset((char*)r, 5, PGSIZE); // fill with junk
-  return (void*)r;
+
+  phyaddr_refcnt = kallocstatistics((uint64)r, KALLOC_INC);
+  if (phyaddr_refcnt != 1) {
+    printf("phyaddr_refcnt=%d\r\n", phyaddr_refcnt);
+    panic("kalloc: phyaddr_refcnt should be 1!\n");
+  }
+
+  return (void *)r;
+}
+
+void kallocstatinit(void) {
+  for (int i = 0; i < ALLOCPAGESCNT; i++) {
+    // set 1 is due to kinit() will kfree() in freerange.
+    alloc_stat_obj.phypages_refcnt[i] = 1;
+  }
+}
+uint8 kallocstatistics(uint64 phyaddr, enum kallocstatoperate kalloc_stat_op) {
+  int pageidx = ((phyaddr - KERNBASE) / 4096);
+  uint8 *phypage_refcnt = &alloc_stat_obj.phypages_refcnt[pageidx];
+
+  if ((kalloc_stat_op == KALLOC_DEC) && (*phypage_refcnt <= 0)) {
+    panic("try to KALLOC_DEC a refcnt is 0's PA!\n");
+  }
+  switch (kalloc_stat_op) {
+  case KALLOC_INC:
+    (*phypage_refcnt)++;
+    break;
+  case KALLOC_DEC:
+    (*phypage_refcnt)--;
+    break;
+  case KALLOC_GETCNT:
+    // do nothing
+    break;
+  default:
+    break;
+  }
+  return (*phypage_refcnt);
 }
