@@ -9,26 +9,12 @@
 #include "riscv.h"
 #include "defs.h"
 
-// TODO: use dynamic method, record PHYSTOP - end[] space is enough.
-#define ALLOCSTAT_NUM 64
 #define ALLOCPAGESCNT 32768
 struct kallocstat {
-  // uint8 *phypages_refcnt[ALLOCSTAT_NUM]; // using kalloc to record phypage
-  //                                        // count, 4096 / 8 = 512 pages. 512
-  //                                        // pages = 512 * 4096 = 2097152
-  //                                        (bytes)
-  //                                        // 0x88000000 - 0x80000000 =
-  //                                        0x8000000
-  //                                        // ＝ 134217728 (bytes) = 32768
-  //                                        (pages)
-  //                                        // 32768 / 512 = 64, so this why
-  //                                        // pointer array size is 64.
   uint8 phypages_refcnt[ALLOCPAGESCNT];
 };
 void freerange(void *pa_start, void *pa_end);
 void kallocstatinit(void);
-// uint8 kallocstatistics(uint64 phyaddr, enum kallocstatoperate
-// kalloc_stat_op);
 
 extern char end[]; // first address after kernel.
                    // defined by kernel.ld.

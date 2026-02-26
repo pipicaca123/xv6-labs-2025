@@ -260,7 +260,6 @@ kfork(void)
   struct proc *np;
   struct proc *p = myproc();
 
-  // printf("KFORK!\r\n");
   // Allocate process.
   if((np = allocproc()) == 0){
     return -1;
