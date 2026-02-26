@@ -41,6 +41,7 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
+  struct spinlock cow_lock;
 } kmem;
 
 void
@@ -49,6 +50,8 @@ kinit()
   kallocstatinit();
 
   initlock(&kmem.lock, "kmem");
+  initlock(&kmem.cow_lock, "kmem_cow");
+
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -101,6 +104,12 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
+  if ((uint64)r >= PHYSTOP || (uint64)r < KERNBASE) {
+    // TODO: maybe make freelist end points to NULL in initflow?
+    printf("kalloc: no more free page!\n");
+    release(&kmem.lock);
+    return 0;
+  }
   if(r)
     kmem.freelist = r->next;
   release(&kmem.lock);
@@ -126,7 +135,9 @@ void kallocstatinit(void) {
 uint8 kallocstatistics(uint64 phyaddr, enum kallocstatoperate kalloc_stat_op) {
   int pageidx = ((phyaddr - KERNBASE) / 4096);
   uint8 *phypage_refcnt = &alloc_stat_obj.phypages_refcnt[pageidx];
+  uint8 refcnt;
 
+  acquire(&kmem.cow_lock);
   if ((kalloc_stat_op == KALLOC_DEC) && (*phypage_refcnt <= 0)) {
     panic("try to KALLOC_DEC a refcnt is 0's PA!\n");
   }
@@ -143,5 +154,7 @@ uint8 kallocstatistics(uint64 phyaddr, enum kallocstatoperate kalloc_stat_op) {
   default:
     break;
   }
-  return (*phypage_refcnt);
+  refcnt = (*phypage_refcnt);
+  release(&kmem.cow_lock);
+  return refcnt;
 }

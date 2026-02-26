@@ -347,6 +347,8 @@ uvmclear(pagetable_t pagetable, uint64 va)
 // Copy from kernel to user.
 // Copy len bytes from src to virtual address dstva in a given page table.
 // Return 0 on success, -1 on error.
+// NOTE: copyout is an operation that modifies user space address data, so it
+// triggers COW phypage writing issue!
 int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
@@ -361,15 +363,24 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0) {
       if((pa0 = vmfault(pagetable, va0, 0)) == 0) {
+        printf("copyout: walkaddr failed\n");
         return -1;
       }
     }
 
     pte = walk(pagetable, va0, 0);
     // forbid copyout over read-only user text pages.
-    if((*pte & PTE_W) == 0)
+    if ((*pte & PTE_PW) == PTE_PW) {
+      // this can avoid parent and children data modify simutanelously!
+
+      pa0 = vmfault(pagetable, va0, 1);
+    } else {
+    }
+    if ((*pte & (PTE_W)) == 0) {
+      printf("copyout: try to copy read-only text page\n");
       return -1;
-      
+    }
+
     n = PGSIZE - (dstva - va0);
     if(n > len)
       n = len;
@@ -466,22 +477,27 @@ vmfault(pagetable_t pagetable, uint64 va, int read)
   uint64 flags;
   uint64 pa;
   uint8 phyaddr_refcnt;
+  char *lazyallocmem;
   struct proc *p = myproc();
-  // printf("VMFAULT\r\n");
 
   if (va >= p->sz) {
-    printf("VMFAULT FLAG0\r\n");
     return 0;
   }
   va = PGROUNDDOWN(va);
-  // printf("VMFAULT FLAG1.0\r\n");
-  // pte = walk(pagetable, va, 0);
-  // printf("PTE=%p, PTEFLAGS=0x%lx\n", pte, PTE_FLAGS(*pte));
   if (!ismapped(pagetable, va)) {
-    return 0;
+    // printf("vmfault: va not mapped, try to alloc\n");
+    lazyallocmem = kalloc();
+    if (lazyallocmem == 0)
+      return 0;
+    memset(lazyallocmem, 0, PGSIZE);
+    if (mappages(pagetable, va, PGSIZE, (uint64)lazyallocmem,
+                 PTE_R | PTE_U | PTE_W) != 0) {
+      kfree(lazyallocmem);
+      return 0;
+    }
+    return (uint64)lazyallocmem;
   }
 
-  // printf("VMFAULT FLAG1\r\n");
   pte = walk(pagetable, va, 0);
   flags = PTE_FLAGS(*pte);
   if ((flags & PTE_PW) == 0) {
