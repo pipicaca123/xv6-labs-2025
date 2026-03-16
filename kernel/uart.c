@@ -142,6 +142,7 @@ uartgetc(void)
 void
 uartintr(void)
 {
+  // this will clearup interrupt status, avoid retrigger interrupt.
   ReadReg(ISR); // acknowledge the interrupt
 
   acquire(&tx_lock);

@@ -104,21 +104,64 @@ e1000_transmit(char *buf, int len)
   // return -1 on failure (e.g., there is no descriptor available)
   // so that the caller knows to free buf.
   //
+  // TODO: deal with very long data, we should control E1000_TXD_CMD_EOP better
+  // TODO: if len > 2048, data should break down to serveral pieces.
+  static uint32 tmx_idx = 0;
+  volatile uint32 *tdt = &regs[E1000_TDT];
+  struct tx_desc *tmx_desc;
 
-  
+  tmx_idx = *tdt;
+  tmx_desc = &tx_ring[tmx_idx];
+  if (!(tmx_desc->status & E1000_TXD_STAT_DD)) {
+    printf("TXD_STAT_DD not triggered! drop packet!");
+    kfree(buf);
+    return -1;
+  }
+
+  tmx_desc->addr = (uint64)buf;
+  tmx_desc->length = len;
+  tmx_desc->status = 0x00; // clear all flags
+  tmx_desc->cmd = (E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP);
+  __sync_synchronize();
+  (*tdt) = ((*tdt) + 1) % TX_RING_SIZE; // tdt add one to trigger transmit
+  tmx_idx++;
+  kfree(buf);
   return 0;
 }
 
-static void
-e1000_recv(void)
-{
+static void e1000_recv(void) {
   //
   // Your code here.
   //
   // Check for packets that have arrived from the e1000
   // Create and deliver a buf for each packet (using net_rx()).
   //
+  // NOTE:
+  // transmit and recv will be appeared in pairs
+  // TODO: add recv buf check
 
+  volatile uint32 *rdt = &regs[E1000_RDT];
+  volatile uint32 *rdh = &regs[E1000_RDH];
+  uint32 rx_idx = ((*rdt) + 1) % RX_RING_SIZE;
+  char *rd_buf;
+  int rd_len;
+
+  if (*rdt == *rdh) {
+    printf("no rx_desc available, new packet may be drop!\r\n");
+  }
+  // recv all buffer at once!
+  while (rx_ring[rx_idx].status & E1000_RXD_STAT_DD) {
+
+    rd_buf = (char *)rx_ring[rx_idx].addr;
+    rd_len = (int)rx_ring[rx_idx].length;
+
+    net_rx(rd_buf, rd_len);
+    // net_rx -> apr_rx will do kfree(), so alloc new buffer for rd_desc
+    rx_ring[rx_idx].addr = (uint64)kalloc();
+    rx_ring[rx_idx].status = 0x00;
+    (*rdt) = rx_idx;
+    rx_idx = (rx_idx + 1) % RX_RING_SIZE;
+  }
 }
 
 void
